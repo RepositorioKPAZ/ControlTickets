@@ -1,5 +1,6 @@
-//const API_BASE_URL = 'https://kpazserv0019-aeajahd3bhc4dkh2.eastus-01.azurewebsites.net/api';
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'https://kpazserv0019-aeajahd3bhc4dkh2.eastus-01.azurewebsites.net/api';
+//const API_BASE_URL = 'https://kpazserv0028-gye9ggg0dbdxe5dx.eastus-01.azurewebsites.net/api';
+//const API_BASE_URL = 'http://localhost:3001/api';
 
 // Generic API client
 class ApiClient {

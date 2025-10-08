@@ -28,8 +28,9 @@ const corsOptions = {
       // 'https://www.tu-dominio.com'
     ];*/
     const allowedOrigins = [
-//      'https://kpazserv0018-djcqb2ecg5hfgcdw.eastus-01.azurewebsites.net',
-      'http://localhost:8080',
+//      'https://kpazserv0027-f5eqhxf4dqegahdf.eastus-01.azurewebsites.net',
+      'https://kpazserv0018-djcqb2ecg5hfgcdw.eastus-01.azurewebsites.net',
+//      'http://localhost:8080',
       // Agregar aquí los dominios de producción cuando estén disponibles
       // 'https://tu-dominio.com',
       // 'https://www.tu-dominio.com'

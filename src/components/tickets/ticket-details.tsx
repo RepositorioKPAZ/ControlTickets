@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/api/client';
 import { useToast } from '@/hooks/use-toast';
 import { TicketStatus, PriorityLevel, Resolver } from '@/types/database';
 import { 
@@ -47,13 +47,7 @@ export function TicketDetails({ ticket, onUpdate }: TicketDetailsProps) {
 
   const loadAgents = async () => {
     try {
-      const { data, error } = await supabase
-        .from('resolvers')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-
-      if (error) throw error;
+      const data = await api.getResolvers();
       setAgents(data || []);
     } catch (error: any) {
       toast({
@@ -66,17 +60,9 @@ export function TicketDetails({ ticket, onUpdate }: TicketDetailsProps) {
 
   const loadCurrentUserRole = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('user_id', user.id)
-        .single();
-
-      if (error) throw error;
-      setCurrentUserRole(data?.role || 'agent');
+      // For now, we'll use a default role since we don't have auth context
+      // TODO: Implement proper user role loading from auth context
+      setCurrentUserRole('agent');
     } catch (error: any) {
       console.error('Error loading user role:', error);
       setCurrentUserRole('agent'); // Default to agent if error
@@ -104,7 +90,7 @@ export function TicketDetails({ ticket, onUpdate }: TicketDetailsProps) {
 
       // Set assigned_at if assigning for the first time
       if (editData.assigned_to && editData.assigned_to !== 'unassigned' && !ticket.assigned_to) {
-        updateData.assigned_at = new Date().toISOString();
+        updateData.assigned_at = 'NOW()';
       }
 
       // Handle closing ticket
@@ -116,12 +102,7 @@ export function TicketDetails({ ticket, onUpdate }: TicketDetailsProps) {
         }
       }
 
-      const { error } = await supabase
-        .from('tickets')
-        .update(updateData)
-        .eq('id', ticket.id);
-
-      if (error) throw error;
+      await api.updateTicket(ticket.id, updateData);
 
       toast({
         title: "Éxito",
@@ -268,7 +249,7 @@ export function TicketDetails({ ticket, onUpdate }: TicketDetailsProps) {
 
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Cliente:</span>
-              <span className="text-sm">{ticket.client?.name || 'N/A'}</span>
+              <span className="text-sm">{ticket.client_name || 'N/A'}</span>
             </div>
 
             <div className="flex justify-between items-center">
@@ -288,7 +269,7 @@ export function TicketDetails({ ticket, onUpdate }: TicketDetailsProps) {
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Creado por:</span>
-              <span className="text-sm">{ticket.created_user?.full_name || 'N/A'}</span>
+              <span className="text-sm">{ticket.created_user_name || 'N/A'}</span>
             </div>
 
             <div className="flex justify-between items-center">
@@ -302,13 +283,13 @@ export function TicketDetails({ ticket, onUpdate }: TicketDetailsProps) {
                     <SelectItem value="unassigned">Sin asignar</SelectItem>
                     {agents.map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
-                        {agent.name}
+                        {agent.full_name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
-                <span className="text-sm">{ticket.assigned_resolver?.name || 'No asignado'}</span>
+                <span className="text-sm">{ticket.assigned_resolver_name || 'No asignado'}</span>
               )}
             </div>
           </CardContent>
@@ -327,14 +308,30 @@ export function TicketDetails({ ticket, onUpdate }: TicketDetailsProps) {
           <div>
             <span className="text-sm font-medium">Creado:</span>
             <p className="text-sm text-muted-foreground">
-              {new Date(ticket.created_at).toLocaleString('es-ES')}
+              {new Date(ticket.created_at).toLocaleString('es-ES', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZone: 'America/Santiago'
+              })}
             </p>
           </div>
           {ticket.assigned_at && (
             <div>
               <span className="text-sm font-medium">Asignado:</span>
               <p className="text-sm text-muted-foreground">
-                {new Date(ticket.assigned_at).toLocaleString('es-ES')}
+                {new Date(ticket.assigned_at).toLocaleString('es-ES', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  timeZone: 'America/Santiago'
+                })}
               </p>
             </div>
           )}
@@ -342,7 +339,15 @@ export function TicketDetails({ ticket, onUpdate }: TicketDetailsProps) {
             <div>
               <span className="text-sm font-medium">Cerrado:</span>
               <p className="text-sm text-muted-foreground">
-                {new Date(ticket.closed_at).toLocaleString('es-ES')}
+                {new Date(ticket.closed_at).toLocaleString('es-ES', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  timeZone: 'America/Santiago'
+                })}
               </p>
             </div>
           )}

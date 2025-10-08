@@ -5,8 +5,8 @@ import { CountryList } from "./country-list";
 import { RequestTypeList } from "./request-type-list";
 import { HolidayList } from "../holidays/holiday-list";
 import { ClientList } from "../clients/client-list";
-import { ResolverList } from "./resolver-list";
-import { Settings, Globe, FileText, Calendar, Users, UserCog } from "lucide-react";
+import { UserList } from "./user-list";
+import { Settings, Globe, FileText, Calendar, Users, Shield } from "lucide-react";
 
 export function SettingsPage() {
   return (
@@ -30,9 +30,9 @@ export function SettingsPage() {
             <Users className="h-4 w-4" />
             <span>Clientes</span>
           </TabsTrigger>
-          <TabsTrigger value="resolvers" className="flex items-center space-x-2">
-            <UserCog className="h-4 w-4" />
-            <span>Resolutores</span>
+          <TabsTrigger value="users" className="flex items-center space-x-2">
+            <Shield className="h-4 w-4" />
+            <span>Usuarios</span>
           </TabsTrigger>
           <TabsTrigger value="holidays" className="flex items-center space-x-2">
             <Calendar className="h-4 w-4" />
@@ -52,8 +52,8 @@ export function SettingsPage() {
           <ClientList />
         </TabsContent>
         
-        <TabsContent value="resolvers">
-          <ResolverList />
+        <TabsContent value="users">
+          <UserList />
         </TabsContent>
         
         <TabsContent value="holidays">

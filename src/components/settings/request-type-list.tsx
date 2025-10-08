@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/api/client";
 import { RequestTypeConfig } from "@/types/database";
 import {
   Table,
@@ -29,24 +29,14 @@ export function RequestTypeList() {
   const { data: requestTypes = [], isLoading } = useQuery({
     queryKey: ["request-types"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("request_types")
-        .select("*")
-        .order("name", { ascending: true });
-      
-      if (error) throw error;
+      const data = await api.getRequestTypes();
       return data as RequestTypeConfig[];
     },
   });
 
   const updateRequestTypeMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from("request_types")
-        .update({ is_active })
-        .eq("id", id);
-      
-      if (error) throw error;
+      await api.updateRequestType(id, { is_active });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["request-types"] });

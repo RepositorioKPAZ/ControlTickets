@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/api/client';
 import { TicketStatus, PriorityLevel, RequestType } from '@/types/database';
 import { Plus, Search, Filter } from 'lucide-react';
 import { TicketForm } from './ticket-form';
@@ -18,8 +18,12 @@ export function TicketList() {
   const [filteredTickets, setFilteredTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('pending');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [resolverFilter, setResolverFilter] = useState<string>('all');
+  const [clientFilter, setClientFilter] = useState<string>('all');
+  const [resolvers, setResolvers] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const { toast } = useToast();
@@ -30,27 +34,24 @@ export function TicketList() {
 
   useEffect(() => {
     filterTickets();
-  }, [tickets, searchTerm, statusFilter, priorityFilter]);
+  }, [tickets, searchTerm, statusFilter, priorityFilter, resolverFilter, clientFilter]);
 
   const loadTickets = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tickets')
-        .select(`
-          *,
-          client:clients(name, email),
-          assigned_resolver:resolvers(name),
-          created_user:profiles!tickets_created_by_fkey(full_name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setTickets(data || []);
+      const [ticketsData, resolversData, clientsData] = await Promise.all([
+        api.getTickets(),
+        api.getResolvers(),
+        api.getClients()
+      ]);
+      
+      setTickets(ticketsData || []);
+      setResolvers(resolversData || []);
+      setClients(clientsData || []);
     } catch (error: any) {
-      console.error('Error loading tickets:', error);
+      console.error('Error loading data:', error);
       toast({
         title: "Error",
-        description: "Error al cargar los tickets: " + error.message,
+        description: "Error al cargar los datos: " + error.message,
         variant: "destructive",
       });
     } finally {
@@ -65,16 +66,30 @@ export function TicketList() {
       filtered = filtered.filter(ticket =>
         ticket.ticket_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
         ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ticket.client?.name.toLowerCase().includes(searchTerm.toLowerCase())
+        (ticket.client_name && ticket.client_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (ticket.usu_solicitante && ticket.usu_solicitante.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(ticket => ticket.status === statusFilter);
+      if (statusFilter === 'pending') {
+        // Mostrar todos los tickets que no estén cerrados
+        filtered = filtered.filter(ticket => ticket.status !== 'closed');
+      } else {
+        filtered = filtered.filter(ticket => ticket.status === statusFilter);
+      }
     }
 
     if (priorityFilter !== 'all') {
       filtered = filtered.filter(ticket => ticket.priority === priorityFilter);
+    }
+
+    if (resolverFilter !== 'all') {
+      filtered = filtered.filter(ticket => ticket.assigned_to === resolverFilter);
+    }
+
+    if (clientFilter !== 'all') {
+      filtered = filtered.filter(ticket => ticket.client_id === clientFilter);
     }
 
     setFilteredTickets(filtered);
@@ -173,7 +188,7 @@ export function TicketList() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Buscar</label>
               <div className="relative">
@@ -194,6 +209,7 @@ export function TicketList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los estados</SelectItem>
+                  <SelectItem value="pending">Pendientes</SelectItem>
                   <SelectItem value="open">Abierto</SelectItem>
                   <SelectItem value="assigned">Asignado</SelectItem>
                   <SelectItem value="in_progress">En Progreso</SelectItem>
@@ -216,6 +232,38 @@ export function TicketList() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Resolutor</label>
+              <Select value={resolverFilter} onValueChange={setResolverFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos los resolutores" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los resolutores</SelectItem>
+                  {resolvers.map((resolver) => (
+                    <SelectItem key={resolver.id} value={resolver.id}>
+                      {resolver.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Cliente</label>
+              <Select value={clientFilter} onValueChange={setClientFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos los clientes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los clientes</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -229,6 +277,7 @@ export function TicketList() {
                 <TableHead>Número</TableHead>
                 <TableHead>Título</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Usuario Solicitante</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Prioridad</TableHead>
                 <TableHead>Asignado a</TableHead>
@@ -242,7 +291,8 @@ export function TicketList() {
                 <TableRow key={ticket.id} className="cursor-pointer hover:bg-muted/50">
                   <TableCell className="font-medium">{ticket.ticket_number}</TableCell>
                   <TableCell className="max-w-[200px] truncate">{ticket.title}</TableCell>
-                  <TableCell>{ticket.client?.name || 'N/A'}</TableCell>
+                  <TableCell>{ticket.client_name || 'N/A'}</TableCell>
+                  <TableCell>{ticket.usu_solicitante || 'N/A'}</TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(ticket.status)}>
                       {formatStatus(ticket.status)}
@@ -253,10 +303,12 @@ export function TicketList() {
                       {formatPriority(ticket.priority)}
                     </Badge>
                   </TableCell>
-                  <TableCell>{ticket.assigned_resolver?.name || 'No asignado'}</TableCell>
-                  <TableCell>{ticket.created_user?.full_name || 'N/A'}</TableCell>
+                  <TableCell>{ticket.assigned_resolver_name || 'No asignado'}</TableCell>
+                  <TableCell>{ticket.created_user_name || 'N/A'}</TableCell>
                   <TableCell>
-                    {new Date(ticket.created_at).toLocaleDateString('es-ES')}
+                    {new Date(ticket.created_at).toLocaleDateString('es-ES', {
+                  timeZone: 'America/Santiago'
+                })}
                   </TableCell>
                   <TableCell>
                     <Dialog>

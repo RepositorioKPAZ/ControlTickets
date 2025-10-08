@@ -5,10 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { api } from '@/integrations/api/client';
+import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { Client, Resolver, RequestType, PriorityLevel } from '@/types/database';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface TicketFormProps {
   onSuccess: () => void;
@@ -16,17 +20,18 @@ interface TicketFormProps {
 }
 
 export function TicketForm({ onSuccess, initialData }: TicketFormProps) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [agents, setAgents] = useState<Resolver[]>([]);
-  const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [openClientPopover, setOpenClientPopover] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
     description: initialData?.description || '',
-    requesting_user: initialData?.requesting_user || '',
     client_id: initialData?.client_id || '',
+    usu_solicitante: initialData?.usu_solicitante || '',
     priority: initialData?.priority || 'medium',
     request_type: initialData?.request_type || 'support',
     assigned_to: initialData?.assigned_to || 'unassigned',
@@ -38,38 +43,22 @@ export function TicketForm({ onSuccess, initialData }: TicketFormProps) {
 
   const loadFormData = async () => {
     try {
-      // Get current user profile
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        
-        console.log('Current user profile:', profile);
-        setCurrentUser(profile);
+      // Load clients
+      const clientsData = await api.getClients();
+      setClients(clientsData || []);
+      
+      if (!clientsData || clientsData.length === 0) {
+        console.warn('No clients found in database');
+        toast({
+          title: "Advertencia",
+          description: "No hay clientes disponibles. Necesitas crear al menos un cliente para crear tickets.",
+          variant: "destructive",
+        });
       }
 
-      // Load only active clients
-      const { data: clientsData, error: clientsError } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-
-      if (clientsError) throw clientsError;
-      setClients(clientsData || []);
-
-      // Load active resolvers
-      const { data: resolversData, error: resolversError } = await supabase
-        .from('resolvers')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-
-      if (resolversError) throw resolversError;
-      console.log('Available resolvers:', resolversData);
+      // Load resolvers (users with agent role)
+      const resolversData = await api.getResolvers();
+      console.log('Resolvers loaded:', resolversData);
       setAgents(resolversData || []);
     } catch (error: any) {
       console.error('Error loading form data:', error);
@@ -81,9 +70,15 @@ export function TicketForm({ onSuccess, initialData }: TicketFormProps) {
     }
   };
 
+  // Función para obtener el nombre del cliente seleccionado
+  const getSelectedClientName = () => {
+    const selectedClient = clients.find(client => client.id === formData.client_id);
+    return selectedClient ? selectedClient.name : '';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser || !currentUser.user_id) {
+    if (!user || !user.id) {
       toast({
         title: "Error",
         description: "No se pudo obtener la información del usuario",
@@ -97,7 +92,7 @@ export function TicketForm({ onSuccess, initialData }: TicketFormProps) {
       // Validate assigned_to value
       let assignedTo = null;
       if (formData.assigned_to && formData.assigned_to !== '' && formData.assigned_to !== 'unassigned') {
-        // Check if the assigned_to value exists in resolvers table
+        // Check if the assigned_to value exists in resolvers
         const resolverExists = agents.find(agent => agent.id === formData.assigned_to);
         if (resolverExists) {
           assignedTo = formData.assigned_to;
@@ -110,31 +105,25 @@ export function TicketForm({ onSuccess, initialData }: TicketFormProps) {
       const ticketData = {
         title: formData.title,
         description: formData.description,
-        requesting_user: formData.requesting_user,
         client_id: formData.client_id,
+        usu_solicitante: formData.usu_solicitante,
         priority: formData.priority,
         request_type: formData.request_type,
         assigned_to: assignedTo,
-        created_by: currentUser.user_id,
-        assigned_at: assignedTo ? new Date().toISOString() : null,
+        created_by: user.id,
+        // No enviar assigned_at desde el frontend, que se maneje en el backend
+        // assigned_at: assignedTo ? new Date().toISOString() : null,
       };
 
       console.log('Current user data:', {
-        id: currentUser.id,
-        user_id: currentUser.user_id,
-        full_name: currentUser.full_name
+        id: user.id,
+        full_name: user.full_name,
+        email: user.email
       });
 
       console.log('Inserting ticket data:', ticketData);
 
-      const { error } = await supabase
-        .from('tickets')
-        .insert(ticketData as any);
-
-      if (error) {
-        console.error('Insert error:', error);
-        throw error;
-      }
+      await api.createTicket(ticketData);
 
       toast({
         title: "Éxito",
@@ -166,30 +155,70 @@ export function TicketForm({ onSuccess, initialData }: TicketFormProps) {
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="requesting_user">Usuario Solicitante</Label>
-          <Input
-            id="requesting_user"
-            value={formData.requesting_user}
-            onChange={(e) => setFormData({ ...formData, requesting_user: e.target.value })}
-            placeholder="Nombre del usuario que solicita"
-          />
-        </div>
+
 
         <div className="space-y-2">
           <Label htmlFor="client_id">Cliente</Label>
-          <Select value={formData.client_id} onValueChange={(value) => setFormData({ ...formData, client_id: value })}>
-            <SelectTrigger>
-              <SelectValue placeholder="Seleccionar cliente" />
-            </SelectTrigger>
-            <SelectContent>
-              {clients.map((client) => (
-                <SelectItem key={client.id} value={client.id}>
-                  {client.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={openClientPopover} onOpenChange={setOpenClientPopover}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={openClientPopover}
+                className="w-full justify-between"
+              >
+                {formData.client_id
+                  ? getSelectedClientName()
+                  : "Buscar cliente..."}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Escribe para buscar cliente..." />
+                <CommandList>
+                  <CommandEmpty>No se encontraron clientes.</CommandEmpty>
+                  <CommandGroup>
+                    {clients.map((client) => (
+                      <CommandItem
+                        key={client.id}
+                        value={client.name}
+                        onSelect={() => {
+                          setFormData({ ...formData, client_id: client.id });
+                          setOpenClientPopover(false);
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            formData.client_id === client.id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <div className="flex flex-col">
+                          <span>{client.name}</span>
+                          {client.contact_name && (
+                            <span className="text-xs text-muted-foreground">
+                              Contacto: {client.contact_name}
+                            </span>
+                          )}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="usu_solicitante">Usuario Solicitante</Label>
+          <Input
+            id="usu_solicitante"
+            value={formData.usu_solicitante}
+            onChange={(e) => setFormData({ ...formData, usu_solicitante: e.target.value })}
+            placeholder="Nombre del usuario que solicita el ticket"
+          />
         </div>
 
         <div className="space-y-2">
@@ -233,7 +262,7 @@ export function TicketForm({ onSuccess, initialData }: TicketFormProps) {
               <SelectItem value="unassigned">Sin asignar</SelectItem>
               {agents.map((agent) => (
                 <SelectItem key={agent.id} value={agent.id}>
-                  {agent.name}
+                  {agent.full_name}
                 </SelectItem>
               ))}
             </SelectContent>

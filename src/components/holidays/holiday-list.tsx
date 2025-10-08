@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/api/client";
 import { Holiday } from "@/types/database";
 import {
   Table,
@@ -30,27 +30,14 @@ export function HolidayList() {
   const { data: holidays = [], isLoading } = useQuery({
     queryKey: ["holidays"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("holidays")
-        .select(`
-          *,
-          country:countries(*)
-        `)
-        .order("date", { ascending: false });
-      
-      if (error) throw error;
+      const data = await api.getHolidays();
       return data as Holiday[];
     },
   });
 
   const updateHolidayMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from("holidays")
-        .update({ is_active })
-        .eq("id", id);
-      
-      if (error) throw error;
+      await api.updateHoliday(id, { is_active });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["holidays"] });
@@ -71,7 +58,7 @@ export function HolidayList() {
   const filteredHolidays = holidays.filter(
     (holiday) =>
       holiday.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      holiday.country?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+      (holiday.country_name && holiday.country_name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleEdit = (holiday: Holiday) => {
@@ -80,7 +67,10 @@ export function HolidayList() {
   };
 
   const handleStatusChange = (holiday: Holiday, is_active: boolean) => {
-    updateHolidayMutation.mutate({ id: holiday.id, is_active });
+    // Only update if the holiday has an is_active field or if we're setting it to true
+    if (holiday.is_active !== undefined || is_active) {
+      updateHolidayMutation.mutate({ id: holiday.id, is_active });
+    }
   };
 
   const handleCloseForm = () => {
@@ -139,18 +129,18 @@ export function HolidayList() {
                     {format(new Date(holiday.date), "dd/MM/yyyy")}
                   </TableCell>
                   <TableCell className="font-medium">{holiday.name}</TableCell>
-                  <TableCell>{holiday.country?.name || "No especificado"}</TableCell>
+                  <TableCell>{holiday.country_name || "No especificado"}</TableCell>
                   <TableCell>
                     <div className="flex items-center space-x-2">
                       <Switch
-                        checked={holiday.is_active}
+                        checked={holiday.is_active ?? true}
                         onCheckedChange={(checked) => 
                           handleStatusChange(holiday, checked)
                         }
                         disabled={updateHolidayMutation.isPending}
                       />
-                      <Badge variant={holiday.is_active ? "default" : "secondary"}>
-                        {holiday.is_active ? "Activo" : "Inactivo"}
+                      <Badge variant={(holiday.is_active ?? true) ? "default" : "secondary"}>
+                        {(holiday.is_active ?? true) ? "Activo" : "Inactivo"}
                       </Badge>
                     </div>
                   </TableCell>

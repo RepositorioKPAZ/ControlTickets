@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/api/client";
 import { Holiday, Country } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,7 @@ const holidaySchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio"),
   date: z.date({ required_error: "La fecha es obligatoria" }),
   country_id: z.string().min(1, "El país es obligatorio"),
-  is_active: z.boolean().default(true),
+  is_active: z.boolean().optional().default(true),
 });
 
 type HolidayFormData = z.infer<typeof holidaySchema>;
@@ -47,14 +47,8 @@ export function HolidayForm({ holiday, onClose }: HolidayFormProps) {
   const { data: countries = [] } = useQuery({
     queryKey: ["countries-active"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("countries")
-        .select("*")
-        .eq("is_active", true)
-        .order("name", { ascending: true });
-      
-      if (error) throw error;
-      return data as Country[];
+      const data = await api.getCountries();
+      return data.filter(country => country.is_active) as Country[];
     },
   });
 
@@ -75,20 +69,13 @@ export function HolidayForm({ holiday, onClose }: HolidayFormProps) {
         date: format(data.date, "yyyy-MM-dd"),
         year: data.date.getFullYear(),
         country_id: data.country_id,
-        is_active: data.is_active,
+        ...(data.is_active !== undefined && { is_active: data.is_active }),
       };
 
       if (holiday) {
-        const { error } = await supabase
-          .from("holidays")
-          .update(holidayData)
-          .eq("id", holiday.id);
-        if (error) throw error;
+        await api.updateHoliday(holiday.id, holidayData);
       } else {
-        const { error } = await supabase
-          .from("holidays")
-          .insert([holidayData]);
-        if (error) throw error;
+        await api.createHoliday(holidayData);
       }
     },
     onSuccess: () => {

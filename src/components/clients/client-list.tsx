@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/api/client';
 import { Client } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,12 +31,7 @@ export const ClientList = () => {
 
   const fetchClients = async () => {
     try {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
+      const data = await api.getClients();
       setClients(data || []);
     } catch (error) {
       console.error('Error fetching clients:', error);
@@ -50,39 +45,12 @@ export const ClientList = () => {
     }
   };
 
-  const toggleClientStatus = async (client: Client) => {
-    try {
-      const { error } = await supabase
-        .from('clients')
-        .update({ is_active: !client.is_active })
-        .eq('id', client.id);
 
-      if (error) throw error;
-
-      setClients(clients.map(c => 
-        c.id === client.id 
-          ? { ...c, is_active: !c.is_active }
-          : c
-      ));
-
-      toast({
-        title: "Cliente actualizado",
-        description: `Cliente ${!client.is_active ? 'activado' : 'desactivado'} exitosamente`,
-      });
-    } catch (error) {
-      console.error('Error updating client status:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo actualizar el estado del cliente",
-        variant: "destructive",
-      });
-    }
-  };
 
   const filteredClients = clients.filter(client =>
     client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.contact_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (client.contact_email && client.contact_email.toLowerCase().includes(searchTerm.toLowerCase()))
+    (client.contact_name && client.contact_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (client.email && client.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleClientSaved = () => {
@@ -148,11 +116,10 @@ export const ClientList = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Contacto</TableHead>
+                <TableHead>Nombre de Contacto</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Teléfono</TableHead>
-                <TableHead>País</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead>Dirección</TableHead>
                 <TableHead>Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -160,15 +127,10 @@ export const ClientList = () => {
               {filteredClients.map((client) => (
                 <TableRow key={client.id}>
                   <TableCell className="font-medium">{client.name}</TableCell>
-                  <TableCell>{client.contact_name}</TableCell>
-                  <TableCell>{client.contact_email || '-'}</TableCell>
-                  <TableCell>{client.contact_phone || '-'}</TableCell>
-                  <TableCell>{client.country || '-'}</TableCell>
-                  <TableCell>
-                    <Badge variant={client.is_active ? "default" : "secondary"}>
-                      {client.is_active ? 'Activo' : 'Inactivo'}
-                    </Badge>
-                  </TableCell>
+                  <TableCell>{client.contact_name || '-'}</TableCell>
+                  <TableCell>{client.email || '-'}</TableCell>
+                  <TableCell>{client.phone || '-'}</TableCell>
+                  <TableCell>{client.address || '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <Button

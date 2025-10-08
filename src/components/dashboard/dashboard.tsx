@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/api/client';
+import { useAuth } from '@/contexts/auth-context';
 import { Ticket, PriorityLevel, TicketStatus } from '@/types/database';
 import { 
   TicketIcon, 
@@ -23,6 +24,7 @@ interface DashboardStats {
 }
 
 export function Dashboard() {
+  const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalTickets: 0,
     openTickets: 0,
@@ -36,69 +38,32 @@ export function Dashboard() {
 
   useEffect(() => {
     loadDashboardData();
-  }, []);
+  }, [user]);
 
   const loadDashboardData = async () => {
     try {
-      // Get all tickets with related data
-      const { data: tickets, error } = await supabase
-        .from('tickets')
-        .select(`
-          *,
-          client:clients(name),
-          assigned_user:profiles!tickets_assigned_to_fkey(full_name),
-          created_user:profiles!tickets_created_by_fkey(full_name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const allTickets = tickets || [];
-      
-      // Calculate stats
-      const totalTickets = allTickets.length;
-      const openTickets = allTickets.filter(t => t.status !== 'closed').length;
-      const closedTickets = allTickets.filter(t => t.status === 'closed').length;
-      
-      // Calculate average resolution time
-      const closedWithTime = allTickets.filter(t => t.status === 'closed' && t.resolution_time_hours);
-      const avgResolutionTime = closedWithTime.length > 0 
-        ? closedWithTime.reduce((sum, t) => sum + (t.resolution_time_hours || 0), 0) / closedWithTime.length
-        : 0;
-
-      // Group by priority
-      const ticketsByPriority = allTickets.reduce((acc, ticket) => {
-        acc[ticket.priority] = (acc[ticket.priority] || 0) + 1;
-        return acc;
-      }, {} as Record<PriorityLevel, number>);
-
-      // Group by status
-      const ticketsByStatus = allTickets.reduce((acc, ticket) => {
-        acc[ticket.status] = (acc[ticket.status] || 0) + 1;
-        return acc;
-      }, {} as Record<TicketStatus, number>);
-
-      // Recent tickets (last 5)  
-      const recentTickets = allTickets.slice(0, 5) as any[];
+      // Get dashboard stats for the current user (if user is a resolver)
+      const userId = user?.role === 'agent' ? user.id : null;
+      const stats = await api.getDashboardStats(userId);
 
       setStats({
-        totalTickets,
-        openTickets,
-        closedTickets,
-        avgResolutionTime,
+        totalTickets: stats.totalTickets,
+        openTickets: stats.openTickets,
+        closedTickets: stats.closedTickets,
+        avgResolutionTime: stats.avgResolutionTime,
         ticketsByPriority: {
-          low: ticketsByPriority.low || 0,
-          medium: ticketsByPriority.medium || 0,
-          high: ticketsByPriority.high || 0,
-          urgent: ticketsByPriority.urgent || 0,
+          low: stats.priorityStats.find((p: any) => p.priority === 'low')?.count || 0,
+          medium: stats.priorityStats.find((p: any) => p.priority === 'medium')?.count || 0,
+          high: stats.priorityStats.find((p: any) => p.priority === 'high')?.count || 0,
+          urgent: stats.priorityStats.find((p: any) => p.priority === 'urgent')?.count || 0,
         },
         ticketsByStatus: {
-          open: ticketsByStatus.open || 0,
-          assigned: ticketsByStatus.assigned || 0,
-          in_progress: ticketsByStatus.in_progress || 0,
-          closed: ticketsByStatus.closed || 0,
+          open: stats.statusStats.find((s: any) => s.status === 'open')?.count || 0,
+          assigned: stats.statusStats.find((s: any) => s.status === 'assigned')?.count || 0,
+          in_progress: stats.statusStats.find((s: any) => s.status === 'in_progress')?.count || 0,
+          closed: stats.statusStats.find((s: any) => s.status === 'closed')?.count || 0,
         },
-        recentTickets,
+        recentTickets: stats.recentTickets,
       });
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -148,13 +113,17 @@ export function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+      <h1 className="text-3xl font-bold text-foreground">
+        {user?.role === 'agent' ? 'Mi Dashboard' : 'Dashboard'}
+      </h1>
       
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Tickets</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {user?.role === 'agent' ? 'Mis Tickets' : 'Total Tickets'}
+            </CardTitle>
             <TicketIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -164,7 +133,9 @@ export function Dashboard() {
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tickets Abiertos</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {user?.role === 'agent' ? 'Mis Tickets Abiertos' : 'Tickets Abiertos'}
+            </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -174,7 +145,9 @@ export function Dashboard() {
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tickets Cerrados</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {user?.role === 'agent' ? 'Mis Tickets Cerrados' : 'Tickets Cerrados'}
+            </CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -189,7 +162,9 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-accent">
-              {stats.avgResolutionTime.toFixed(1)}h
+              {typeof stats.avgResolutionTime === 'number' && !isNaN(stats.avgResolutionTime) 
+                ? `${stats.avgResolutionTime.toFixed(1)}h` 
+                : '0.0h'}
             </div>
           </CardContent>
         </Card>
@@ -199,7 +174,9 @@ export function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>Tickets por Estado</CardTitle>
+            <CardTitle>
+              {user?.role === 'agent' ? 'Mis Tickets por Estado' : 'Tickets por Estado'}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {Object.entries(stats.ticketsByStatus).map(([status, count]) => (
@@ -207,7 +184,10 @@ export function Dashboard() {
                 <div className="flex items-center space-x-2">
                   <div className={`w-3 h-3 rounded-full ${getStatusColor(status as TicketStatus)}`}></div>
                   <span className="text-sm font-medium capitalize">
-                    {status === 'in_progress' ? 'En Progreso' : status}
+                    {status === 'in_progress' ? 'En Progreso' : 
+                     status === 'open' ? 'Abierto' :
+                     status === 'assigned' ? 'Asignado' :
+                     status === 'closed' ? 'Cerrado' : status}
                   </span>
                 </div>
                 <span className="text-sm font-bold">{count}</span>
@@ -218,10 +198,12 @@ export function Dashboard() {
 
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>Tickets Recientes</CardTitle>
+            <CardTitle>
+              {user?.role === 'agent' ? 'Mis Tickets Recientes' : 'Tickets Recientes'}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {stats.recentTickets.map((ticket) => (
+            {(stats.recentTickets || []).map((ticket) => (
               <div key={ticket.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">{ticket.ticket_number}</p>
@@ -239,7 +221,7 @@ export function Dashboard() {
                 </div>
               </div>
             ))}
-            {stats.recentTickets.length === 0 && (
+            {(stats.recentTickets || []).length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
                 No hay tickets recientes
               </p>

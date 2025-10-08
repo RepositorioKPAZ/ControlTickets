@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/api/client";
 import { Client } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,11 +11,8 @@ import { CalendarIcon, BarChart3 } from "lucide-react";
 import { format, startOfYear, endOfYear } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
-  ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
   ChartLegend,
-  ChartLegendContent,
 } from "@/components/ui/chart";
 import {
   BarChart,
@@ -34,13 +31,7 @@ export function ClientTicketsReport() {
   const { data: clients = [] } = useQuery({
     queryKey: ["clients-active"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("is_active", true)
-        .order("name", { ascending: true });
-      
-      if (error) throw error;
+      const data = await api.getClients();
       return data as Client[];
     },
   });
@@ -50,55 +41,14 @@ export function ClientTicketsReport() {
     queryKey: ["client-tickets-report", selectedClient, year.getFullYear()],
     queryFn: async () => {
       if (!selectedClient) return [];
-
-      const startDate = startOfYear(year);
-      const endDate = endOfYear(year);
-
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("created_at, closed_at, status")
-        .eq("client_id", selectedClient)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
-
-      if (error) throw error;
-
-      // Process data to group by month
-      const monthlyData = Array.from({ length: 12 }, (_, index) => ({
-        month: format(new Date(year.getFullYear(), index, 1), "MMM"),
-        monthNumber: index + 1,
-        created: 0,
-        closed: 0,
-      }));
-
-      data.forEach((ticket) => {
-        const createdMonth = new Date(ticket.created_at).getMonth();
-        monthlyData[createdMonth].created += 1;
-
-        if (ticket.closed_at) {
-          const closedDate = new Date(ticket.closed_at);
-          if (closedDate.getFullYear() === year.getFullYear()) {
-            const closedMonth = closedDate.getMonth();
-            monthlyData[closedMonth].closed += 1;
-          }
-        }
-      });
-
-      return monthlyData;
+      
+      const data = await api.getClientTicketsReport(selectedClient, year.getFullYear());
+      return data;
     },
     enabled: !!selectedClient,
   });
 
-  const chartConfig = {
-    created: {
-      label: "Tickets Creados",
-      color: "#3b82f6",
-    },
-    closed: {
-      label: "Tickets Cerrados",
-      color: "#22c55e",
-    },
-  };
+
 
   return (
     <Card>
@@ -158,28 +108,26 @@ export function ClientTicketsReport() {
           isLoading ? (
             <div className="text-center py-8">Cargando datos del reporte...</div>
           ) : (
-            <div className="h-80">
-              <ChartContainer config={chartConfig}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={reportData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    <Bar
-                      dataKey="created"
-                      fill="var(--color-created)"
-                      name="Tickets Creados"
-                    />
-                    <Bar
-                      dataKey="closed"
-                      fill="var(--color-closed)"
-                      name="Tickets Cerrados"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height={256}>
+                <BarChart data={reportData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <ChartTooltip />
+                  <ChartLegend />
+                  <Bar
+                    dataKey="created"
+                    fill="#3b82f6"
+                    name="Tickets Creados"
+                  />
+                  <Bar
+                    dataKey="closed"
+                    fill="#22c55e"
+                    name="Tickets Cerrados"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           )
         ) : (

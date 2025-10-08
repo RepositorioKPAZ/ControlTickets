@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Profile } from "@/types/database";
+import { api } from "@/integrations/api/client";
+import { Resolver } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,8 @@ import { CalendarIcon, TrendingUp } from "lucide-react";
 import { format, startOfYear, endOfYear } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
-  ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
   ChartLegend,
-  ChartLegendContent,
 } from "@/components/ui/chart";
 import {
   BarChart,
@@ -34,13 +31,7 @@ export function ResolverTicketsReport() {
   const { data: resolvers = [] } = useQuery({
     queryKey: ["resolvers-active"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("resolvers")
-        .select("*")
-        .eq("is_active", true)
-        .order("name", { ascending: true });
-      
-      if (error) throw error;
+      const data = await api.getResolvers();
       return data;
     },
   });
@@ -50,62 +41,14 @@ export function ResolverTicketsReport() {
     queryKey: ["resolver-tickets-report", selectedResolver, year.getFullYear()],
     queryFn: async () => {
       if (!selectedResolver) return [];
-
-      const startDate = startOfYear(year);
-      const endDate = endOfYear(year);
-
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("assigned_at, status")
-        .eq("assigned_to", selectedResolver)
-        .not("assigned_at", "is", null)
-        .gte("assigned_at", startDate.toISOString())
-        .lte("assigned_at", endDate.toISOString());
-
-      if (error) throw error;
-
-      // Process data to group by month and status
-      const monthlyData = Array.from({ length: 12 }, (_, index) => ({
-        month: format(new Date(year.getFullYear(), index, 1), "MMM"),
-        monthNumber: index + 1,
-        open: 0,
-        assigned: 0,
-        in_progress: 0,
-        closed: 0,
-      }));
-
-      data.forEach((ticket) => {
-        const assignedMonth = new Date(ticket.assigned_at!).getMonth();
-        const status = ticket.status;
-        
-        if (monthlyData[assignedMonth] && status in monthlyData[assignedMonth]) {
-          (monthlyData[assignedMonth] as any)[status] += 1;
-        }
-      });
-
-      return monthlyData;
+      
+      const data = await api.getResolverTicketsReport(selectedResolver, year.getFullYear());
+      return data;
     },
     enabled: !!selectedResolver,
   });
 
-  const chartConfig = {
-    open: {
-      label: "Abierto",
-      color: "#ef4444",
-    },
-    assigned: {
-      label: "Asignado",
-      color: "#3b82f6",
-    },
-    in_progress: {
-      label: "En Progreso",
-      color: "#eab308",
-    },
-    closed: {
-      label: "Cerrado",
-      color: "#22c55e",
-    },
-  };
+
 
   return (
     <Card>
@@ -114,6 +57,9 @@ export function ResolverTicketsReport() {
           <TrendingUp className="h-5 w-5" />
           <span>Tickets por Estado por Mes - Por Resolutor</span>
         </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Reporte de tickets gestionados por resolutores (usuarios con rol "Resolutor")
+        </p>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -121,12 +67,12 @@ export function ResolverTicketsReport() {
             <label className="text-sm font-medium mb-2 block">Resolutor</label>
             <Select value={selectedResolver} onValueChange={setSelectedResolver}>
               <SelectTrigger>
-                <SelectValue placeholder="Seleccionar resolutor" />
+                <SelectValue placeholder="Seleccionar resolutor (agente)" />
               </SelectTrigger>
               <SelectContent>
                       {resolvers.map((resolver) => (
                         <SelectItem key={resolver.id} value={resolver.id}>
-                          {resolver.name}
+                          {resolver.full_name}
                         </SelectItem>
                       ))}
               </SelectContent>
@@ -165,42 +111,40 @@ export function ResolverTicketsReport() {
           isLoading ? (
             <div className="text-center py-8">Cargando datos del reporte...</div>
           ) : (
-            <div className="h-80">
-              <ChartContainer config={chartConfig}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={reportData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    <Bar
-                      dataKey="open"
-                      stackId="a"
-                      fill="var(--color-open)"
-                      name="Abierto"
-                    />
-                    <Bar
-                      dataKey="assigned"
-                      stackId="a"
-                      fill="var(--color-assigned)"
-                      name="Asignado"
-                    />
-                    <Bar
-                      dataKey="in_progress"
-                      stackId="a"
-                      fill="var(--color-in_progress)"
-                      name="En Progreso"
-                    />
-                    <Bar
-                      dataKey="closed"
-                      stackId="a"
-                      fill="var(--color-closed)"
-                      name="Cerrado"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height={256}>
+                <BarChart data={reportData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <ChartTooltip />
+                  <ChartLegend />
+                  <Bar
+                    dataKey="open"
+                    stackId="a"
+                    fill="#ef4444"
+                    name="Abierto"
+                  />
+                  <Bar
+                    dataKey="assigned"
+                    stackId="a"
+                    fill="#3b82f6"
+                    name="Asignado"
+                  />
+                  <Bar
+                    dataKey="in_progress"
+                    stackId="a"
+                    fill="#eab308"
+                    name="En Progreso"
+                  />
+                  <Bar
+                    dataKey="closed"
+                    stackId="a"
+                    fill="#22c55e"
+                    name="Cerrado"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           )
         ) : (

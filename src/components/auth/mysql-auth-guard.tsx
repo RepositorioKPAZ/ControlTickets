@@ -1,40 +1,23 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { User } from '@supabase/supabase-js';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, KeyRound } from 'lucide-react';
+import { useAuth } from '@/contexts/auth-context';
 
 interface AuthGuardProps {
   children: React.ReactNode;
 }
 
-export function AuthGuard({ children }: AuthGuardProps) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+export function MySQLAuthGuard({ children }: AuthGuardProps) {
+  const { user, loading, login, resetPassword } = useAuth();
   const [isPasswordReset, setIsPasswordReset] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const { toast } = useToast();
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,10 +25,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
     try {
       if (isPasswordReset) {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/`,
-        });
-        if (error) throw error;
+        await resetPassword(email);
         toast({
           title: "Email enviado",
           description: "Revisa tu email para restablecer tu contraseña.",
@@ -53,11 +33,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
         setIsPasswordReset(false);
         setEmail('');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
+        await login(email, password);
         toast({
           title: "Bienvenido",
           description: "Has iniciado sesión correctamente.",
@@ -123,7 +99,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
               <Button
                 type="submit"
                 className="w-full"
-                variant="corporate"
+                variant="default"
                 disabled={authLoading}
               >
                 {authLoading ? (

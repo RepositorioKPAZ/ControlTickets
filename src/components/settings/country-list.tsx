@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/integrations/api/client";
 import { Country } from "@/types/database";
 import {
   Table,
@@ -29,24 +29,14 @@ export function CountryList() {
   const { data: countries = [], isLoading } = useQuery({
     queryKey: ["countries"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("countries")
-        .select("*")
-        .order("name", { ascending: true });
-      
-      if (error) throw error;
+      const data = await api.getCountries();
       return data as Country[];
     },
   });
 
   const updateCountryMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from("countries")
-        .update({ is_active })
-        .eq("id", id);
-      
-      if (error) throw error;
+      await api.updateCountry(id, { is_active });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["countries"] });

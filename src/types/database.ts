@@ -5,11 +5,7 @@ export type PriorityLevel = 'low' | 'medium' | 'high' | 'urgent';
 export interface Client {
   id: string;
   name: string;
-  contact_name: string;
-  contact_phone?: string;
-  contact_email?: string;
-  country?: string;
-  is_active: boolean;
+  contact_name?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -33,10 +29,11 @@ export interface Holiday {
   name: string;
   year: number;
   country_id: string;
-  is_active: boolean;
+  is_active?: boolean; // Made optional to handle cases where column doesn't exist
   created_at: string;
   // Relations
   country?: Country;
+  country_name?: string; // From JOIN query
 }
 
 export interface Ticket {
@@ -48,6 +45,7 @@ export interface Ticket {
   priority: PriorityLevel;
   request_type: RequestType;
   client_id: string;
+  usu_solicitante?: string;
   assigned_to?: string;
   created_by: string;
   assigned_at?: string;
@@ -73,11 +71,21 @@ export interface TicketHistory {
   changed_by_user?: Profile;
 }
 
+export interface User {
+  id: string;
+  full_name: string;
+  email: string;
+  role: 'admin' | 'agent' | 'user';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Resolver {
   id: string;
-  name: string;
+  full_name: string; // Changed from 'name' to 'full_name' to match users table
   email: string;
-  phone?: string;
+  role: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

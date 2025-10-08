@@ -9,9 +9,11 @@ import {
   Menu,
   X,
   FileBarChart,
+  Key,
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
+import { ChangePasswordDialog } from '@/components/auth/change-password-dialog';
 
 interface SidebarProps {
   activeSection: string;
@@ -20,18 +22,31 @@ interface SidebarProps {
 
 export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [showChangePasswordDialog, setShowChangePasswordDialog] = useState(false);
   const { toast } = useToast();
+  const { logout, user } = useAuth();
 
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'tickets', label: 'Tickets', icon: Ticket },
-    { id: 'reports', label: 'Reportes', icon: FileBarChart },
-    { id: 'settings', label: 'Configuración', icon: Settings },
-  ];
+  // Filtrar elementos del menú basado en el rol del usuario
+  const getMenuItems = () => {
+    const baseItems = [
+      { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+      { id: 'tickets', label: 'Tickets', icon: Ticket },
+      { id: 'reports', label: 'Reportes', icon: FileBarChart },
+    ];
 
-  const handleLogout = async () => {
+    // Solo mostrar configuración para administradores
+    if (user?.role === 'admin') {
+      baseItems.push({ id: 'settings', label: 'Configuración', icon: Settings });
+    }
+
+    return baseItems;
+  };
+
+  const menuItems = getMenuItems();
+
+  const handleLogout = () => {
     try {
-      await supabase.auth.signOut();
+      logout();
       toast({
         title: "Sesión cerrada",
         description: "Has cerrado sesión correctamente.",
@@ -43,6 +58,10 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
         variant: "destructive",
       });
     }
+  };
+
+  const handleChangePassword = () => {
+    setShowChangePasswordDialog(true);
   };
 
   return (
@@ -91,6 +110,25 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
       </nav>
 
       <div className="p-4 border-t border-border">
+        {!collapsed && user && (
+          <div 
+            className="mb-3 px-2 py-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+            onClick={handleChangePassword}
+            title="Haz clic para cambiar tu contraseña"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-foreground">
+                  {user.full_name}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {user.email}
+                </div>
+              </div>
+              <Key className="h-3 w-3 text-muted-foreground" />
+            </div>
+          </div>
+        )}
         <Button
           variant="ghost"
           className={cn(
@@ -103,6 +141,15 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
           {!collapsed && <span className="ml-2">Cerrar Sesión</span>}
         </Button>
       </div>
+
+      {/* Diálogo de cambio de contraseña */}
+      {user && (
+        <ChangePasswordDialog
+          open={showChangePasswordDialog}
+          onOpenChange={setShowChangePasswordDialog}
+          userId={user.id}
+        />
+      )}
     </div>
   );
 }

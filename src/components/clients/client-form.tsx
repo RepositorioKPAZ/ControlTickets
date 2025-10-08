@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/integrations/api/client';
 import { Client } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,10 +19,8 @@ export const ClientForm = ({ client, onSave, onCancel }: ClientFormProps) => {
   const [formData, setFormData] = useState({
     name: '',
     contact_name: '',
-    contact_phone: '',
-    contact_email: '',
-    country: '',
-    is_active: true,
+    email: '',
+    phone: '',
     address: '',
   });
   const [loading, setLoading] = useState(false);
@@ -33,10 +31,8 @@ export const ClientForm = ({ client, onSave, onCancel }: ClientFormProps) => {
       setFormData({
         name: client.name || '',
         contact_name: client.contact_name || '',
-        contact_phone: client.contact_phone || '',
-        contact_email: client.contact_email || '',
-        country: client.country || '',
-        is_active: client.is_active,
+        email: client.email || '',
+        phone: client.phone || '',
         address: client.address || '',
       });
     }
@@ -49,12 +45,7 @@ export const ClientForm = ({ client, onSave, onCancel }: ClientFormProps) => {
     try {
       if (client) {
         // Update existing client
-        const { error } = await supabase
-          .from('clients')
-          .update(formData)
-          .eq('id', client.id);
-
-        if (error) throw error;
+        await api.updateClient(client.id, formData);
 
         toast({
           title: "Cliente actualizado",
@@ -62,11 +53,7 @@ export const ClientForm = ({ client, onSave, onCancel }: ClientFormProps) => {
         });
       } else {
         // Create new client
-        const { error } = await supabase
-          .from('clients')
-          .insert([formData]);
-
-        if (error) throw error;
+        await api.createClient(formData);
 
         toast({
           title: "Cliente creado",
@@ -117,40 +104,31 @@ export const ClientForm = ({ client, onSave, onCancel }: ClientFormProps) => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="contact_name">Nombre del Contacto *</Label>
+                <Label htmlFor="contact_name">Nombre de Contacto</Label>
                 <Input
                   id="contact_name"
                   value={formData.contact_name}
                   onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
-                  required
+                  placeholder="Nombre de la persona de contacto"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="contact_email">Email del Contacto</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="contact_email"
+                  id="email"
                   type="email"
-                  value={formData.contact_email}
-                  onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="contact_phone">Teléfono del Contacto</Label>
+                <Label htmlFor="phone">Teléfono</Label>
                 <Input
-                  id="contact_phone"
-                  value={formData.contact_phone}
-                  onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="country">País</Label>
-                <Input
-                  id="country"
-                  value={formData.country}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 />
               </div>
 
@@ -164,14 +142,7 @@ export const ClientForm = ({ client, onSave, onCancel }: ClientFormProps) => {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="is_active"
-                checked={formData.is_active}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-              />
-              <Label htmlFor="is_active">Cliente activo</Label>
-            </div>
+
 
             <div className="flex gap-4">
               <Button
